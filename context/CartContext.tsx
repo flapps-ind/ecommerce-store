@@ -40,7 +40,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   }, [cart]);
 
   // Inside CartContext
-const addToCart = (product) => {
+const addToCart = (product: any) => {
   setCart((prevCart) => {
     const existingItem = prevCart.find((item) => item.id === product.id);
     if (existingItem) {

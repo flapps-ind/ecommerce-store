@@ -1,13 +1,15 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
+import Script from 'next/script';
 import StaggeredMenu from './StaggeredMenu';
 import { useCart } from "../context/CartContext";
 
 export default function Navbar() {
-  const { cart, removeFromCart, getCartTotal } = useCart();
+  const { cart, removeFromCart, getCartTotal, clearCart } = useCart();
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   // Compute total dynamic item count across quantity buffers
   const totalItems = cart.reduce((total, item) => total + item.quantity, 0);
@@ -42,10 +44,60 @@ export default function Navbar() {
     { label: 'LinkedIn', link: 'https://linkedin.com' }
   ];
 
-  // Handler intercepted to watch for our injected custom mobile anchor link trigger
-  const handleMenuClick = (item: any) => {
-    if (item.link === '#cart-trigger') {
-      setIsCartOpen(true);
+  // Checkout Handler via Razorpay Tunnel Execution
+  const handleRazorpayCheckout = async () => {
+    if (!(window as any).Razorpay) {
+      alert("// SYSTEM_ERROR: CHECKOUT_ENGINE_NOT_READY_YET");
+      return;
+    }
+
+    setIsProcessing(true);
+
+    try {
+      const response = await fetch('/api/razorpay', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ totalAmount: getCartTotal() }),
+      });
+
+      const orderData = await response.json();
+
+      // Diagnostic verification logic
+      if (!response.ok || !orderData.orderId) {
+        alert(`// GATEWAY_ERROR: ${orderData.error || 'BAD_RESPONSE'}`);
+        setIsProcessing(false);
+        return;
+      }
+
+      const options = {
+        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID, 
+        amount: orderData.amount,
+        currency: "INR",
+        name: "⬡ KINETIC LABS",
+        description: "ARCHIVAL_HARDWARE_ACQUISITION",
+        order_id: orderData.orderId,
+        handler: function (response: any) {
+          alert(`// TRANSACTION_SUCCESSFUL \n// PAYMENT_ID: ${response.razorpay_payment_id}`);
+          clearCart(); // Clear active cart storage upon successful validation
+          setIsCartOpen(false);
+        },
+        prefill: {
+          name: "OPERATOR",
+          email: "operator@kinetic.network",
+        },
+        theme: {
+          color: "#ffaa00",
+        },
+      };
+
+      const paymentObject = new (window as any).Razorpay(options);
+      paymentObject.open();
+
+    } catch (error: any) {
+      console.error(error);
+      alert(`// SYSTEM_CRITICAL: ${error.message || 'TUNNEL_DISCONNECT'}`);
+    } finally {
+      setIsProcessing(false);
     }
   };
   
@@ -56,7 +108,7 @@ export default function Navbar() {
       <div className="fixed top-8 right-36 z-50 pointer-events-auto hidden md:block">
         <button 
           onClick={() => setIsCartOpen(true)}
-          className="font-mono text-xs tracking-wider flex items-center gap-2 group focus:outline-none bg-black/90 backdrop-blur-xs px-3 border-l border-r border-neutral-900 hover:border-neutral-700 rounded-xs transition-colors"
+          className="font-mono text-xs tracking-wider flex items-center gap-2 group focus:outline-none bg-black/90 backdrop-blur-xs px-3 h-[36px] border-l border-r border-neutral-900 hover:border-neutral-700 rounded-xs transition-colors"
         >
           <span className="text-orange-500 group-hover:text-orange-400 font-bold">//</span> 
           <span className="text-white uppercase tracking-widest">CART</span>
@@ -70,15 +122,25 @@ export default function Navbar() {
         </button>
       </div>
 
-      {/* ─── STAGGERED MENU CONTAINER ─── */}
-      {/* We use a div click capture boundary to intercept selection maps dynamically */}
-      <div className="pointer-events-auto" onClick={(e) => {
-        // Fallback listener injection if StaggeredMenu doesn't provide an onItemClick prop
-        const target = e.target as HTMLElement;
-        if (target.textContent?.includes('05 CART')) {
-          setIsCartOpen(true);
-        }
-      }}>
+      {/* ─── STAGGERED MENU CONTAINER WITH AUTO-CLOSE INTERCEPTOR ─── */}
+      <div 
+        className="pointer-events-auto" 
+        onClick={(e) => {
+          const target = e.target as HTMLElement;
+          
+          if (target.textContent?.includes('05 CART')) {
+            setIsCartOpen(true);
+          }
+
+          const clickedLink = target.closest('a');
+          if (clickedLink) {
+            const closeButton = document.querySelector('button[class*="menu"], div[class*="button"]') as HTMLElement;
+            if (closeButton) {
+              closeButton.click();
+            }
+          }
+        }}
+      >
         <StaggeredMenu
           position="right"
           items={menuItems}
@@ -160,10 +222,11 @@ export default function Navbar() {
               
               {cart.length > 0 ? (
                 <button 
-                  onClick={() => alert("// ROUTING TO STRIPE ENCRYPTED TUNNEL...")}
-                  className="w-full bg-orange-500 hover:bg-orange-600 text-black py-3.5 text-center text-xs font-bold uppercase tracking-widest transition-colors duration-200"
+                  onClick={handleRazorpayCheckout}
+                  disabled={isProcessing}
+                  className="w-full bg-orange-500 hover:bg-orange-600 disabled:bg-neutral-800 disabled:text-neutral-600 text-black py-3.5 text-center text-xs font-bold uppercase tracking-widest transition-colors duration-200"
                 >
-                  INITIALIZE_CHECKOUT_SEQUENCE
+                  {isProcessing ? "ESTABLISHING_ENCRYPTED_TUNNEL..." : "INITIALIZE_CHECKOUT_SEQUENCE"}
                 </button>
               ) : (
                 <button 
@@ -178,6 +241,12 @@ export default function Navbar() {
           </div>
         </div>
       )}
+
+      {/* ─── NEXT.JS DEFER REFRESH SCRIPT OPTIMIZER ─── */}
+      <Script 
+        src="https://checkout.razorpay.com/v1/checkout.js"
+        strategy="lazyOnload"
+      />
     </div>
   );
 }

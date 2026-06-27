@@ -156,9 +156,12 @@ export default function Hero() {
               <a href="#products" className="relative text-center px-6 py-3 bg-amber-500 text-black border-amber-500 hover:bg-transparent hover:text-amber-500 font-bold text-xs hover:bg-transparent hover:text-white border hover:border-white transition-all duration-200 tracking-widest uppercase">
                 BROWSE SHOP
               </a>
-              <button className="relative text-center px-6 py-3 bg-transparent border border-white/30 text-white/80 font-bold text-xs hover:border-white hover:text-white transition-all duration-200 tracking-widest uppercase">
-                NEW RELEASES
-              </button>
+              <a href="#products">
+                <button className="relative text-center px-6 py-3 bg-transparent border border-white/30 text-white/80 font-bold text-xs hover:border-white hover:text-white transition-all duration-200 tracking-widest uppercase">
+                  NEW RELEASES
+                </button>
+              </a>
+                
             </div>
 
           </div>

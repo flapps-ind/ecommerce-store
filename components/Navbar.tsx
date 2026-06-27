@@ -117,7 +117,8 @@ export default function Navbar() {
       paymentObject.open();
 
     } catch (error) {
-      console.error("Critical gateway failure execution payload:", error);
+      // Minor debug string update to cleanly break deployment cache match
+      console.error("// TRANSMISSION_FAILURE: CHANNELS_BLOCKED ->", error);
       alert("// SYSTEM_CRITICAL: GATEWAY_TUNNEL_DISCONNECT");
     } finally {
       setIsProcessing(false);
@@ -168,7 +169,7 @@ export default function Navbar() {
       >
         <StaggeredMenu
           position="right"
-          className="" // FIXED: Added missing required className prop to resolve type error
+          className="" // Added missing required className property to resolve type error layout constraints
           items={menuItems as any} 
           socialItems={socialItems as any} 
           displaySocials={true}

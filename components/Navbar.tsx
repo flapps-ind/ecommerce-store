@@ -1,31 +1,42 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import Script from 'next/script';
 import StaggeredMenu from './StaggeredMenu';
 import { useCart } from "../context/CartContext";
+
+const loadRazorpayScript = (): Promise<boolean> => {
+  return new Promise((resolve) => {
+    if ((window as any).Razorpay) {
+      resolve(true);
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+};
 
 export default function Navbar() {
   const { cart, removeFromCart, getCartTotal, clearCart } = useCart();
   const [isCartOpen, setIsCartOpen] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false); 
   const [isMobile, setIsMobile] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // Compute total dynamic item count across quantity buffers
   const totalItems = cart.reduce((total, item) => total + item.quantity, 0);
 
-  // Track window resizing to dynamically toggle the mobile menu item layout array
   useEffect(() => {
     const checkViewport = () => {
-      setIsMobile(window.innerWidth < 768); // 768px matches Tailwind's 'md' breakpoint
+      setIsMobile(window.innerWidth < 768);
     };
     
-    checkViewport(); // Initial check
+    checkViewport();
     window.addEventListener('resize', checkViewport);
     return () => window.removeEventListener('resize', checkViewport);
   }, []);
 
-  // Core desktop platform configuration map
   const baseMenuItems = [
     { label: '01 HARDWARE', ariaLabel: 'Go to hardware store', link: '#products' },
     { label: '02 INDEX', ariaLabel: 'Learn about us', link: '#about' },
@@ -33,7 +44,6 @@ export default function Navbar() {
     { label: '04 NETWORK', ariaLabel: 'Get in touch', link: '#contact' }
   ];
 
-  // If on mobile screen space, seamlessly inject CART as the 5th option item
   const menuItems = isMobile 
     ? [...baseMenuItems, { label: `05 CART [${totalItems}]`, ariaLabel: 'Open shopping cart stack', link: '#cart-trigger' }]
     : baseMenuItems;
@@ -44,14 +54,14 @@ export default function Navbar() {
     { label: 'LinkedIn', link: 'https://linkedin.com' }
   ];
 
-  // Checkout Handler via Razorpay Tunnel Execution
   const handleRazorpayCheckout = async () => {
-    if (!(window as any).Razorpay) {
-      alert("// SYSTEM_ERROR: CHECKOUT_ENGINE_NOT_READY_YET");
+    setIsProcessing(true);
+    const isScriptLoaded = await loadRazorpayScript();
+    if (!isScriptLoaded) {
+      alert("// SYSTEM_ERROR: CHECKOUT_ENGINE_LOAD_TIMEOUT");
+      setIsProcessing(false);
       return;
     }
-
-    setIsProcessing(true);
 
     try {
       const response = await fetch('/api/razorpay', {
@@ -61,10 +71,8 @@ export default function Navbar() {
       });
 
       const orderData = await response.json();
-
-      // Diagnostic verification logic
-      if (!response.ok || !orderData.orderId) {
-        alert(`// GATEWAY_ERROR: ${orderData.error || 'BAD_RESPONSE'}`);
+      if (!orderData.orderId) {
+        alert("// GATEWAY_FAILURE: ORDER_STACK_REJECTED");
         setIsProcessing(false);
         return;
       }
@@ -78,24 +86,18 @@ export default function Navbar() {
         order_id: orderData.orderId,
         handler: function (response: any) {
           alert(`// TRANSACTION_SUCCESSFUL \n// PAYMENT_ID: ${response.razorpay_payment_id}`);
-          clearCart(); // Clear active cart storage upon successful validation
+          clearCart();
           setIsCartOpen(false);
         },
-        prefill: {
-          name: "OPERATOR",
-          email: "operator@kinetic.network",
-        },
-        theme: {
-          color: "#ffaa00",
-        },
+        prefill: { name: "OPERATOR", email: "operator@kinetic.network" },
+        theme: { color: "#ffaa00" },
       };
 
       const paymentObject = new (window as any).Razorpay(options);
       paymentObject.open();
-
-    } catch (error: any) {
-      console.error(error);
-      alert(`// SYSTEM_CRITICAL: ${error.message || 'TUNNEL_DISCONNECT'}`);
+    } catch (error) {
+      console.error("Critical gateway failure execution payload:", error);
+      alert("// SYSTEM_CRITICAL: GATEWAY_TUNNEL_DISCONNECT");
     } finally {
       setIsProcessing(false);
     }
@@ -105,10 +107,13 @@ export default function Navbar() {
     <div className="fixed top-0 left-0 w-full z-50 pointer-events-none font-mono">
       
       {/* ─── FIXED FLOATING CART BADGE (DESKTOP ONLY) ─── */}
-      <div className="fixed top-8 right-36 z-50 pointer-events-auto hidden md:block">
+      {/* FIXED: Trimmed px-3 to px-2.5 and py-1 to py-0.5 to wipe out the extra box margins */}
+      <div className={`fixed top-9 right-36 transition-all duration-200 hidden md:block ${
+        isMenuOpen || isCartOpen ? 'z-0 opacity-0 pointer-events-none' : 'z-50 pointer-events-auto'
+      }`}>
         <button 
           onClick={() => setIsCartOpen(true)}
-          className="font-mono text-xs tracking-wider flex items-center gap-2 group focus:outline-none bg-black/90 backdrop-blur-xs px-3 h-[36px] border-l border-r border-neutral-900 hover:border-neutral-700 rounded-xs transition-colors"
+          className="font-mono text-xs tracking-wider flex items-center gap-2 group focus:outline-none bg-black/90 backdrop-blur-xs px-2.5 py-0.5 border-l border-r border-neutral-900 hover:border-neutral-700 rounded-xs transition-colors"
         >
           <span className="text-orange-500 group-hover:text-orange-400 font-bold">//</span> 
           <span className="text-white uppercase tracking-widest">CART</span>
@@ -122,22 +127,18 @@ export default function Navbar() {
         </button>
       </div>
 
-      {/* ─── STAGGERED MENU CONTAINER WITH AUTO-CLOSE INTERCEPTOR ─── */}
+      {/* ─── STAGGERED MENU CONTAINER ─── */}
       <div 
-        className="pointer-events-auto" 
+        className={`pointer-events-auto relative transition-all duration-200 ${isCartOpen ? 'z-20' : 'z-40'}`} 
         onClick={(e) => {
           const target = e.target as HTMLElement;
-          
           if (target.textContent?.includes('05 CART')) {
             setIsCartOpen(true);
           }
-
           const clickedLink = target.closest('a');
           if (clickedLink) {
             const closeButton = document.querySelector('button[class*="menu"], div[class*="button"]') as HTMLElement;
-            if (closeButton) {
-              closeButton.click();
-            }
+            if (closeButton) closeButton.click();
           }
         }}
       >
@@ -153,19 +154,19 @@ export default function Navbar() {
           colors={['#000000', '#09090b']} 
           logoUrl="⬡ KINETIC"
           accentColor="#ffaa00"
-          onMenuOpen={() => console.log('Menu opened')}
-          onMenuClose={() => console.log('Menu closed')}
+          onMenuOpen={() => setIsMenuOpen(true)}
+          onMenuClose={() => setIsMenuOpen(false)}
         />
       </div>
 
       {/* ─── DYNAMIC SLIDE-OUT CART PANEL DRAWER ─── */}
       {isCartOpen && (
-        <div className="fixed inset-0 z-50 flex justify-end bg-black/70 backdrop-blur-xs transition-opacity duration-300 pointer-events-auto">
+        <div className="fixed inset-0 z-30 flex justify-end bg-black/70 backdrop-blur-xs transition-opacity duration-300 pointer-events-auto">
           <div className="absolute inset-0" onClick={() => setIsCartOpen(false)} />
 
-          <div className="relative w-full max-w-md h-full bg-neutral-950 border-l border-neutral-900 p-6 flex flex-col justify-between text-white font-mono shadow-2xl z-10">
+          <div className="relative w-full max-w-md h-full bg-neutral-950 border-l border-neutral-900 flex flex-col justify-between text-white font-mono shadow-2xl z-10">
             <div>
-              <div className="flex justify-between items-center border-b border-neutral-900 pb-4">
+              <div className="flex justify-between items-center border-b border-neutral-900 pb-4 p-6">
                 <h3 className="text-sm font-bold tracking-widest text-orange-500">// CART_BUFFER_STACK</h3>
                 <button 
                   onClick={() => setIsCartOpen(false)}
@@ -175,7 +176,7 @@ export default function Navbar() {
                 </button>
               </div>
 
-              <div className="mt-6 space-y-4 overflow-y-auto max-h-[65vh] pr-1 scrollbar-thin">
+              <div className="mt-6 space-y-4 overflow-y-auto max-h-[65vh] px-6 pr-4 scrollbar-thin">
                 {cart.length === 0 ? (
                   <div className="text-xs text-neutral-600 mt-4 tracking-wider leading-relaxed">
                     // SYSTEM_ERROR: NO_ACTIVE_ASSETS_FOUND <br />
@@ -214,8 +215,9 @@ export default function Navbar() {
               </div>
             </div>
 
-            <div className="border-t border-neutral-900 pt-4 bg-neutral-950">
-              <div className="flex justify-between text-xs tracking-widest mb-6">
+            {/* FIXED: Restructured bottom zone padding and added mt-4 to the button to fix the top margin crash */}
+            <div className="border-t border-neutral-900 p-6 bg-neutral-950 mt-auto">
+              <div className="flex justify-between text-xs tracking-widest">
                 <span className="text-neutral-500">AGGREGATE_VAL:</span>
                 <span className="font-bold text-orange-500 text-sm">${getCartTotal()}.00</span>
               </div>
@@ -224,14 +226,14 @@ export default function Navbar() {
                 <button 
                   onClick={handleRazorpayCheckout}
                   disabled={isProcessing}
-                  className="w-full bg-orange-500 hover:bg-orange-600 disabled:bg-neutral-800 disabled:text-neutral-600 text-black py-3.5 text-center text-xs font-bold uppercase tracking-widest transition-colors duration-200"
+                  className="w-full h-12 mt-4 flex items-center justify-center bg-orange-500 hover:bg-orange-600 disabled:bg-neutral-800 disabled:text-neutral-600 text-black text-xs font-bold uppercase tracking-widest transition-colors duration-200 cursor-pointer"
                 >
                   {isProcessing ? "ESTABLISHING_ENCRYPTED_TUNNEL..." : "INITIALIZE_CHECKOUT_SEQUENCE"}
                 </button>
               ) : (
                 <button 
                   disabled
-                  className="w-full bg-neutral-900 text-neutral-600 py-3.5 text-center text-xs font-bold uppercase tracking-widest cursor-not-allowed border border-neutral-900"
+                  className="w-full h-12 mt-4 flex items-center justify-center bg-neutral-900 text-neutral-600 text-xs font-bold uppercase tracking-widest cursor-not-allowed border border-neutral-900"
                 >
                   TERMINAL_LOCKED
                 </button>
@@ -241,12 +243,6 @@ export default function Navbar() {
           </div>
         </div>
       )}
-
-      {/* ─── NEXT.JS DEFER REFRESH SCRIPT OPTIMIZER ─── */}
-      <Script 
-        src="https://checkout.razorpay.com/v1/checkout.js"
-        strategy="lazyOnload"
-      />
     </div>
   );
 }

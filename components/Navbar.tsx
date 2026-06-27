@@ -37,6 +37,7 @@ export default function Navbar() {
     return () => window.removeEventListener('resize', checkViewport);
   }, []);
 
+  // Core desktop platform configuration map
   const baseMenuItems = [
     { label: '01 HARDWARE', ariaLabel: 'Go to hardware store', link: '#products' },
     { label: '02 INDEX', ariaLabel: 'Learn about us', link: '#about' },
@@ -44,7 +45,8 @@ export default function Navbar() {
     { label: '04 NETWORK', ariaLabel: 'Get in touch', link: '#contact' }
   ];
 
-  const menuItems = isMobile 
+  // FIXED: Explicitly typed as an any array or custom menu object array to satisfy strict checking
+  const menuItems: any[] = isMobile 
     ? [...baseMenuItems, { label: `05 CART [${totalItems}]`, ariaLabel: 'Open shopping cart stack', link: '#cart-trigger' }]
     : baseMenuItems;
 

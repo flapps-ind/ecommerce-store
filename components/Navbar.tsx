@@ -4,6 +4,14 @@ import React, { useState, useEffect } from 'react';
 import StaggeredMenu from './StaggeredMenu';
 import { useCart } from "../context/CartContext";
 
+// Explicit interface definition to provide solid local structures
+interface MenuItem {
+  label: string;
+  ariaLabel: string;
+  link: string;
+}
+
+// Dynamic script loader for Razorpay window interface
 const loadRazorpayScript = (): Promise<boolean> => {
   return new Promise((resolve) => {
     if ((window as any).Razorpay) {
@@ -25,28 +33,30 @@ export default function Navbar() {
   const [isMobile, setIsMobile] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
+  // Compute total dynamic item count across quantity buffers
   const totalItems = cart.reduce((total, item) => total + item.quantity, 0);
 
+  // Track window resizing to dynamically toggle the mobile menu item layout array
   useEffect(() => {
     const checkViewport = () => {
-      setIsMobile(window.innerWidth < 768);
+      setIsMobile(window.innerWidth < 768); // 768px matches Tailwind's 'md' breakpoint
     };
     
-    checkViewport();
+    checkViewport(); // Initial check
     window.addEventListener('resize', checkViewport);
     return () => window.removeEventListener('resize', checkViewport);
   }, []);
 
   // Core desktop platform configuration map
-  const baseMenuItems = [
+  const baseMenuItems: MenuItem[] = [
     { label: '01 HARDWARE', ariaLabel: 'Go to hardware store', link: '#products' },
     { label: '02 INDEX', ariaLabel: 'Learn about us', link: '#about' },
     { label: '03 AUTH_PORTAL', ariaLabel: 'Sign in or sign up', link: '#auth' },
     { label: '04 NETWORK', ariaLabel: 'Get in touch', link: '#contact' }
   ];
 
-  // FIXED: Explicitly typed as an any array or custom menu object array to satisfy strict checking
-  const menuItems: any[] = isMobile 
+  // If on mobile screen space, seamlessly inject CART as the 5th option item
+  const menuItems = isMobile 
     ? [...baseMenuItems, { label: `05 CART [${totalItems}]`, ariaLabel: 'Open shopping cart stack', link: '#cart-trigger' }]
     : baseMenuItems;
 
@@ -56,8 +66,10 @@ export default function Navbar() {
     { label: 'LinkedIn', link: 'https://linkedin.com' }
   ];
 
+  // Checkout Handler via Razorpay Tunnel
   const handleRazorpayCheckout = async () => {
     setIsProcessing(true);
+
     const isScriptLoaded = await loadRazorpayScript();
     if (!isScriptLoaded) {
       alert("// SYSTEM_ERROR: CHECKOUT_ENGINE_LOAD_TIMEOUT");
@@ -73,6 +85,7 @@ export default function Navbar() {
       });
 
       const orderData = await response.json();
+
       if (!orderData.orderId) {
         alert("// GATEWAY_FAILURE: ORDER_STACK_REJECTED");
         setIsProcessing(false);
@@ -88,15 +101,21 @@ export default function Navbar() {
         order_id: orderData.orderId,
         handler: function (response: any) {
           alert(`// TRANSACTION_SUCCESSFUL \n// PAYMENT_ID: ${response.razorpay_payment_id}`);
-          clearCart();
+          clearCart(); // Wipes cart buffer on successful completion
           setIsCartOpen(false);
         },
-        prefill: { name: "OPERATOR", email: "operator@kinetic.network" },
-        theme: { color: "#ffaa00" },
+        prefill: {
+          name: "OPERATOR",
+          email: "operator@kinetic.network",
+        },
+        theme: {
+          color: "#ffaa00",
+        },
       };
 
       const paymentObject = new (window as any).Razorpay(options);
       paymentObject.open();
+
     } catch (error) {
       console.error("Critical gateway failure execution payload:", error);
       alert("// SYSTEM_CRITICAL: GATEWAY_TUNNEL_DISCONNECT");
@@ -109,7 +128,6 @@ export default function Navbar() {
     <div className="fixed top-0 left-0 w-full z-50 pointer-events-none font-mono">
       
       {/* ─── FIXED FLOATING CART BADGE (DESKTOP ONLY) ─── */}
-      {/* FIXED: Trimmed px-3 to px-2.5 and py-1 to py-0.5 to wipe out the extra box margins */}
       <div className={`fixed top-9 right-36 transition-all duration-200 hidden md:block ${
         isMenuOpen || isCartOpen ? 'z-0 opacity-0 pointer-events-none' : 'z-50 pointer-events-auto'
       }`}>
@@ -129,25 +147,30 @@ export default function Navbar() {
         </button>
       </div>
 
-      {/* ─── STAGGERED MENU CONTAINER ─── */}
+      {/* ─── STAGGERED MENU CONTAINER WITH AUTO-CLOSE INTERCEPTOR ─── */}
       <div 
         className={`pointer-events-auto relative transition-all duration-200 ${isCartOpen ? 'z-20' : 'z-40'}`} 
         onClick={(e) => {
           const target = e.target as HTMLElement;
+          
           if (target.textContent?.includes('05 CART')) {
             setIsCartOpen(true);
           }
+
           const clickedLink = target.closest('a');
           if (clickedLink) {
             const closeButton = document.querySelector('button[class*="menu"], div[class*="button"]') as HTMLElement;
-            if (closeButton) closeButton.click();
+            if (closeButton) {
+              closeButton.click();
+            }
           }
         }}
       >
         <StaggeredMenu
           position="right"
-          items={menuItems}
-          socialItems={socialItems}
+          className="" // FIXED: Added missing required className prop to resolve type error
+          items={menuItems as any} 
+          socialItems={socialItems as any} 
           displaySocials={true}
           displayItemNumbering={false}
           menuButtonColor="#ffaa00"
@@ -217,7 +240,7 @@ export default function Navbar() {
               </div>
             </div>
 
-            {/* FIXED: Restructured bottom zone padding and added mt-4 to the button to fix the top margin crash */}
+            {/* Bottom Form Checkout Execution Block */}
             <div className="border-t border-neutral-900 p-6 bg-neutral-950 mt-auto">
               <div className="flex justify-between text-xs tracking-widest">
                 <span className="text-neutral-500">AGGREGATE_VAL:</span>
